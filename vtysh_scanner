@@ -41,12 +41,28 @@ foreach my $neighbor (@neighbors) {
     close ROUTES or die "can't open vtysh routes for $neighbor: $!";
 }
 
+my %info;
+open INFO, '<', 'info.conf' or die "can't open `info.conf': $!";
+while (my $line = <INFO>) {
+    $line =~ s/^\s+//;
+    $line =~ s/\s+$//;
+    next if $line eq '';
+    next if $line =~ /^#/;
+    my ($as, $name, $type) = split /\s+/, $line;
+    $info{$as}->{NAME} = $name if defined $name;
+    $info{$as}->{TYPE} = $type if defined $type;
+}
+close INFO or die "can't close `info.conf': $!";
+
 use GraphViz;
 
 my $g = GraphViz->new();
 
 foreach my $as (keys %as) {
     $g->add_node($as);
+    $g->add_node($as, label => "$as: $info{$as}->{NAME}")  if exists $info{$as}->{NAME};
+    $g->add_node($as, style => 'filled', fillcolor => 'lightgrey') if exists $info{$as}->{TYPE};
+    $g->add_node($as, style => 'filled', fillcolor => 'lightblue') if $as == $my_as;
 }
 
 foreach my $peering (keys %peering) {
