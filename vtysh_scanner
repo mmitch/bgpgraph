@@ -27,8 +27,11 @@ foreach my $neighbor (@neighbors) {
 	if ($line =~ /^(\*.*) i/) {
 
 	    my $last_as = undef;
-	    foreach my $as ( sort ( $my_as, split (/ /, substr($1, $colstart))) ) {
-		$peering{"${as}:${last_as}"}++ if defined $last_as;
+	    foreach my $as ( $my_as, split (/ /, substr($1, $colstart)) ) {
+		if (defined $last_as) {
+		    my ($from, $to) = sort ($as, $last_as);
+		    $peering{"$from:$to"}++;
+		}
 		$as{$as}++;
 		$last_as = $as;
 	    }
