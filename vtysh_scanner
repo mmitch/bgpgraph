@@ -1,0 +1,58 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+
+my @neighbors;
+
+open NEIGHBORS, "vtysh -c 'show ip bgp summary'|" or die "can't open vtysh summary: $!";
+my $my_as;
+while (my $line = <NEIGHBORS>) {
+    if ($line =~ /^(\d+\.\d+\.\d+\.\d+\s)/) {
+	push @neighbors, $1;
+    } elsif ($line =~ /local AS number (\d+)/) {
+	$my_as = $1;
+    }
+}
+close NEIGHBORS or die "can't close vtysh summary: $!";
+
+my %peering;
+my %as;
+
+foreach my $neighbor (@neighbors) {
+
+    open ROUTES, "vtysh -c 'show ip bgp neighbors $neighbor routes'|" or die "can't open vtysh routes for $neighbor: $!";
+    my $colstart = 0;
+    while (my $line = <ROUTES>) {
+
+	if ($line =~ /^(\*.*) i/) {
+
+	    my $last_as = undef;
+	    foreach my $as ( sort ( $my_as, split (/ /, substr($1, $colstart))) ) {
+		$peering{"${as}:${last_as}"}++ if defined $last_as;
+		$as{$as}++;
+		$last_as = $as;
+	    }
+
+	} elsif ($line =~ /Path/) {
+	    $colstart = index $line, 'Path';
+	}
+	    
+    }
+    close ROUTES or die "can't open vtysh routes for $neighbor: $!";
+}
+
+use GraphViz;
+
+my $g = GraphViz->new();
+
+foreach my $as (keys %as) {
+    $g->add_node($as);
+}
+
+foreach my $peering (keys %peering) {
+    die unless $peering =~ /(.*):(.*)/;
+    $g->add_edge($1 => $2, 'dir' => 'none');
+}
+
+print $g->as_png;
+
