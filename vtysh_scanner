@@ -57,10 +57,7 @@ while (my $line = <ACTIVE>) {
 	next if length($1) < $colstart;
 	my $last_as = undef;
 	foreach my $as ( $my_as, split (/ /, substr($1, $colstart)) ) {
-	    if (defined $last_as) {
-		my ($from, $to) = sort ($as, $last_as);
-		$active{"$from:$to"}++;
-	    }
+	    $active{"${last_as}:${as}"}++ if defined $last_as;
 	    $last_as = $as;
 	}
 	
