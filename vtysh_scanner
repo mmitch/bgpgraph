@@ -97,6 +97,8 @@ foreach my $peering (keys %peering) {
     die unless $peering =~ /(.*):(.*)/;
     if (exists $active{$peering}) {
 	$g->add_edge($1 => $2);
+    } elsif (exists $active{"$2:$1"}) {
+	$g->add_edge($2 => $1);
     } else {
 	$g->add_edge($1 => $2, 'dir' => 'none', weight => 0, color => '0, 0, 0.5');
     }
