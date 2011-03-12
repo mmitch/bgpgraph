@@ -88,7 +88,7 @@ my $g = GraphViz->new();
 
 foreach my $as (keys %as) {
     $g->add_node($as);
-    $g->add_node($as, label => "$as: $info{$as}->{NAME}")  if exists $info{$as}->{NAME};
+    $g->add_node($as, label => "$as\n$info{$as}->{NAME}")  if exists $info{$as}->{NAME};
     $g->add_node($as, style => 'filled', fillcolor => 'lightgrey') if exists $info{$as}->{TYPE};
     $g->add_node($as, style => 'filled', fillcolor => 'lightblue') if $as == $my_as;
 }
