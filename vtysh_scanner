@@ -1,4 +1,10 @@
 #!/usr/bin/perl
+#
+# vtysh_scanner - print a network graph of routing information
+# 
+# Copyright (C) 2011  Christian Garbs <mitch@cgarbs.de>
+# Licensed under GNU GPL 3 or later.
+# 
 use strict;
 use warnings;
 
