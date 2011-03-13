@@ -70,17 +70,19 @@ close ACTIVE or die "can't open vtysh active routes: $!";
 
 
 my %info;
-open INFO, '<', 'info.conf' or die "can't open `info.conf': $!";
-while (my $line = <INFO>) {
-    $line =~ s/^\s+//;
-    $line =~ s/\s+$//;
-    next if $line eq '';
-    next if $line =~ /^#/;
-    my ($as, $name, $type) = split /\s+/, $line;
-    $info{$as}->{NAME} = $name if defined $name;
-    $info{$as}->{TYPE} = $type if defined $type;
+if ( -r 'info.conf') {
+    open INFO, '<', 'info.conf' or die "can't open `info.conf': $!";
+    while (my $line = <INFO>) {
+	$line =~ s/^\s+//;
+	$line =~ s/\s+$//;
+	next if $line eq '';
+	next if $line =~ /^#/;
+	my ($as, $name, $type) = split /\s+/, $line;
+	$info{$as}->{NAME} = $name if defined $name;
+	$info{$as}->{TYPE} = $type if defined $type;
+    }
+    close INFO or die "can't close `info.conf': $!";
 }
-close INFO or die "can't close `info.conf': $!";
 
 use GraphViz;
 
