@@ -9,6 +9,33 @@ use strict;
 use warnings;
 
 
+### subroutines
+
+sub read_vtysh_paths($$)
+# read path information from vtysh
+# figure out, on which column the paths begin
+{
+    local *FH = shift;
+    my $marker = shift;
+    my @ret;
+
+    my $startcol = 0;
+    while (my $line = <FH>) {
+
+	if ($line =~ /^(${marker}.*) i/) {
+	    next if length($1) < $startcol;
+	    push @ret, substr($1, $startcol);
+
+	} elsif ($line =~ /Path/) {
+	    $startcol = index $line, 'Path';
+	}
+	    
+    }
+
+    return @ret;
+}
+
+
 ### read configuration
 
 my %config;
@@ -48,26 +75,20 @@ my %as;
 foreach my $neighbor (@neighbors) {
 
     open ROUTES, "vtysh -c 'show ip bgp neighbors $neighbor routes'|" or die "can't open vtysh routes for $neighbor: $!";
-    my $colstart = 0;
-    while (my $line = <ROUTES>) {
 
-	# pick only valid routes
-	if ($line =~ /^(\*.*) i/) {
+    # pick only valid routes
+    foreach my $line (read_vtysh_paths(*ROUTES, '\*')) {
 
-	    my $last_as = undef;
-	    foreach my $as ( $my_as, split (/ /, substr($1, $colstart)) ) {
-		if (defined $last_as) {
-		    my ($from, $to) = sort ($as, $last_as);
-		    $peering{"$from:$to"}++;
-		}
-		$as{$as}++;
-		$last_as = $as;
+	my $last_as = undef;
+	foreach my $as ( $my_as, split (/ /, $line) ) {
+	    if (defined $last_as) {
+		my ($from, $to) = sort ($as, $last_as);
+		$peering{"$from:$to"}++;
 	    }
-
-	} elsif ($line =~ /Path/) {
-	    $colstart = index $line, 'Path';
+	    $as{$as}++;
+	    $last_as = $as;
 	}
-	    
+	
     }
     close ROUTES or die "can't open vtysh routes for $neighbor: $!";
 }
@@ -75,21 +96,14 @@ foreach my $neighbor (@neighbors) {
 my %active;
 
 open ACTIVE, "vtysh -c 'show ip bgp'|" or die "can't open vtysh active routes: $!";
-my $colstart = 0;
-while (my $line = <ACTIVE>) {
 
-    # pick only valid and best routes
-    if ($line =~ /^(\*>.*) i/) {
-
-	next if length($1) < $colstart;
-	my $last_as = undef;
-	foreach my $as ( $my_as, split (/ /, substr($1, $colstart)) ) {
-	    $active{"${last_as}:${as}"}++ if defined $last_as;
-	    $last_as = $as;
-	}
-	
-    } elsif ($line =~ /Path/) {
-	$colstart = index $line, 'Path';
+# pick only valid and best routes
+foreach my $line (read_vtysh_paths(*ACTIVE, '\*>')) {
+    
+    my $last_as = undef;
+    foreach my $as ( $my_as, split (/ /, $line) ) {
+	$active{"${last_as}:${as}"}++ if defined $last_as;
+	$last_as = $as;
     }
     
 }
