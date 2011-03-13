@@ -8,6 +8,27 @@
 use strict;
 use warnings;
 
+
+### read configuration
+
+my %config;
+if ( -r 'info.conf') {
+    open CONFIG, '<', 'info.conf' or die "can't open `info.conf': $!";
+    while (my $line = <CONFIG>) {
+	$line =~ s/^\s+//;
+	$line =~ s/\s+$//;
+	next if $line eq '';
+	next if $line =~ /^#/;
+	my ($as, $name, $type) = split /\s+/, $line;
+	$config{$as}->{NAME} = $name if defined $name;
+	$config{$as}->{TYPE} = $type if defined $type;
+    }
+    close CONFIG or die "can't close `info.conf': $!";
+}
+
+
+### collect information
+
 my @neighbors;
 
 open NEIGHBORS, "vtysh -c 'show ip bgp summary'|" or die "can't open vtysh summary: $!";
@@ -75,20 +96,7 @@ while (my $line = <ACTIVE>) {
 close ACTIVE or die "can't open vtysh active routes: $!";
 
 
-my %info;
-if ( -r 'info.conf') {
-    open INFO, '<', 'info.conf' or die "can't open `info.conf': $!";
-    while (my $line = <INFO>) {
-	$line =~ s/^\s+//;
-	$line =~ s/\s+$//;
-	next if $line eq '';
-	next if $line =~ /^#/;
-	my ($as, $name, $type) = split /\s+/, $line;
-	$info{$as}->{NAME} = $name if defined $name;
-	$info{$as}->{TYPE} = $type if defined $type;
-    }
-    close INFO or die "can't close `info.conf': $!";
-}
+### print graph
 
 use GraphViz;
 
@@ -96,8 +104,8 @@ my $g = GraphViz->new();
 
 foreach my $as (keys %as) {
     $g->add_node($as);
-    $g->add_node($as, label => "$as\n$info{$as}->{NAME}")  if exists $info{$as}->{NAME};
-    $g->add_node($as, style => 'filled', fillcolor => 'lightgrey') if exists $info{$as}->{TYPE};
+    $g->add_node($as, label => "$as\n$config{$as}->{NAME}")  if exists $config{$as}->{NAME};
+    $g->add_node($as, style => 'filled', fillcolor => 'lightgrey') if exists $config{$as}->{TYPE};
     $g->add_node($as, style => 'filled', fillcolor => 'lightblue') if $as == $my_as;
 }
 
