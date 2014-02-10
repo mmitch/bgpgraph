@@ -90,7 +90,7 @@ foreach my $neighbor (@neighbors) {
 	}
 	
     }
-    close ROUTES or die "can't open vtysh routes for $neighbor: $!";
+    close ROUTES or die "can't close vtysh routes for $neighbor: $!";
 }
 
 my %active;
@@ -107,7 +107,7 @@ foreach my $line (read_vtysh_paths(*ACTIVE, '\*>')) {
     }
     
 }
-close ACTIVE or die "can't open vtysh active routes: $!";
+close ACTIVE or die "can't close vtysh active routes: $!";
 
 
 ### print graph
