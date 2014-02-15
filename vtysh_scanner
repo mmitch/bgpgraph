@@ -2,12 +2,14 @@
 #
 # vtysh_scanner - print a network graph of routing information
 # 
-# Copyright (C) 2011  Christian Garbs <mitch@cgarbs.de>
+# Copyright (C) 2011,2014  Christian Garbs <mitch@cgarbs.de>
 # Licensed under GNU GPL 3 or later.
 # 
 use strict;
 use warnings;
 
+### global configuration
+my $SSH = '';
 
 ### subroutines
 
@@ -20,28 +22,80 @@ sub read_vtysh_paths($$)
     my @ret;
 
     my $startcol = 0;
-    while (my $line = <FH>) {
-
-	if ($line =~ /^(${marker}.*) i/) {
+    while (my $line = <FH>)
+    {
+	if ($line =~ /^(${marker}.*) i/)
+	{
 	    next if length($1) < $startcol;
 	    push @ret, substr($1, $startcol);
 
-	} elsif ($line =~ /Path/) {
+	}
+	elsif ($line =~ /Path/)
+	{
 	    $startcol = index $line, 'Path';
 	}
-	    
     }
-
     return @ret;
+}
+
+sub exec_vtysh($)
+# generate a vtysh commandline		    
+{
+    if ($SSH eq '')
+    {
+	return sprintf("vtysh -c '%s'|", @_);
+    }
+    else
+    {
+	return sprintf("ssh %s vtysh -c \"'%s'\"|", $SSH, @_);
+    }
+}
+
+sub show_help()
+# print help text
+{
+    print<<"EOF";
+usage:  $0 [-h|--help] [<SSH remote connection arguments>]
+
+examples:
+   $0                           local data
+   $0 -h                        help text
+   $0 root\@somewhere.net        remote data
+   $0 '-p 1234 somewhere.net'   remote data with extra SSH arguments
+
+output is a PNG file on stdout, redirect it somewhere
+EOF
+    ;
+}
+
+
+### parse commandline arguments
+
+if (@ARGV > 1)
+{
+    show_help();
+    exit 1;
+}
+
+if (defined $ARGV[0])
+{
+    if ($ARGV[0] eq '-h' or $ARGV[0] eq '--help' )
+    {
+	show_help;
+	exit 0;
+    }
+    $SSH = $ARGV[0];
 }
 
 
 ### read configuration
 
 my %config;
-if ( -r 'info.conf') {
+if ( -r 'info.conf')
+{
     open CONFIG, '<', 'info.conf' or die "can't open `info.conf': $!";
-    while (my $line = <CONFIG>) {
+    while (my $line = <CONFIG>)
+    {
 	$line =~ s/^\s+//;
 	$line =~ s/\s+$//;
 	next if $line eq '';
@@ -58,12 +112,16 @@ if ( -r 'info.conf') {
 
 my @neighbors;
 
-open NEIGHBORS, "vtysh -c 'show ip bgp summary'|" or die "can't open vtysh summary: $!";
+open NEIGHBORS, exec_vtysh('show ip bgp summary') or die "can't open vtysh summary: $!";
 my $my_as;
-while (my $line = <NEIGHBORS>) {
-    if ($line =~ /^(\d+\.\d+\.\d+\.\d+\s)/) {
+while (my $line = <NEIGHBORS>)
+{
+    if ($line =~ /^(\d+\.\d+\.\d+\.\d+\s)/)
+    {
 	push @neighbors, $1;
-    } elsif ($line =~ /local AS number (\d+)/) {
+    }
+    elsif ($line =~ /local AS number (\d+)/)
+    {
 	$my_as = $1;
     }
 }
@@ -72,40 +130,41 @@ close NEIGHBORS or die "can't close vtysh summary: $!";
 my %peering;
 my %as;
 
-foreach my $neighbor (@neighbors) {
-
-    open ROUTES, "vtysh -c 'show ip bgp neighbors $neighbor routes'|" or die "can't open vtysh routes for $neighbor: $!";
+foreach my $neighbor (@neighbors)
+{
+    open ROUTES, exec_vtysh("show ip bgp neighbors $neighbor routes") or die "can't open vtysh routes for $neighbor: $!";
 
     # pick only valid routes
-    foreach my $line (read_vtysh_paths(*ROUTES, '\*')) {
-
+    foreach my $line (read_vtysh_paths(*ROUTES, '\*'))
+    {
 	my $last_as = undef;
-	foreach my $as ( $my_as, split (/ /, $line) ) {
-	    if (defined $last_as) {
+	foreach my $as ( $my_as, split (/ /, $line) )
+	{
+	    if (defined $last_as)
+	    {
 		my ($from, $to) = sort ($as, $last_as);
 		$peering{"$from:$to"}++;
 	    }
 	    $as{$as}++;
 	    $last_as = $as;
 	}
-	
     }
     close ROUTES or die "can't close vtysh routes for $neighbor: $!";
 }
 
 my %active;
 
-open ACTIVE, "vtysh -c 'show ip bgp'|" or die "can't open vtysh active routes: $!";
+open ACTIVE, exec_vtysh('show ip bgp') or die "can't open vtysh active routes: $!";
 
 # pick only valid and best routes
-foreach my $line (read_vtysh_paths(*ACTIVE, '\*>')) {
-    
+foreach my $line (read_vtysh_paths(*ACTIVE, '\*>'))
+{
     my $last_as = undef;
-    foreach my $as ( $my_as, split (/ /, $line) ) {
+    foreach my $as ( $my_as, split (/ /, $line) )
+    {
 	$active{"${last_as}:${as}"}++ if defined $last_as;
 	$last_as = $as;
     }
-    
 }
 close ACTIVE or die "can't close vtysh active routes: $!";
 
@@ -116,20 +175,27 @@ use GraphViz;
 
 my $g = GraphViz->new();
 
-foreach my $as (keys %as) {
+foreach my $as (keys %as)
+{
     $g->add_node($as);
     $g->add_node($as, label => "$as\n$config{$as}->{NAME}")  if exists $config{$as}->{NAME};
     $g->add_node($as, style => 'filled', fillcolor => 'lightgrey') if exists $config{$as}->{TYPE};
     $g->add_node($as, style => 'filled', fillcolor => 'lightblue') if $as == $my_as;
 }
 
-foreach my $peering (keys %peering) {
+foreach my $peering (keys %peering)
+{
     die unless $peering =~ /(.*):(.*)/;
-    if (exists $active{$peering}) {
+    if (exists $active{$peering})
+    {
 	$g->add_edge($1 => $2);
-    } elsif (exists $active{"$2:$1"}) {
+    }
+    elsif (exists $active{"$2:$1"})
+    {
 	$g->add_edge($2 => $1);
-    } else {
+    }
+    else
+    {
 	$g->add_edge($1 => $2, 'dir' => 'none', weight => 0, color => '0, 0, 0.5');
     }
 }
