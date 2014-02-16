@@ -37,13 +37,14 @@ shift
 # concatenate all other parameters and remove quoting, if present
 ARGS="$*"
 IFS=\'
-set -- "$ARGS"
+set -- $ARGS
 IFS=\ 
 ARGS="$*"
 IFS=\"
-set -- "$ARGS"
+set -- $ARGS
 IFS=\ 
 ARGS="$*"
 
 # wrap call to vtysh
+echo "<$VTYSH>" -c "<$ARGS>"
 "$VTYSH" -c "$ARGS"
