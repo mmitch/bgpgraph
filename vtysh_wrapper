@@ -1,0 +1,49 @@
+#!/bin/sh
+
+#
+# set this script in your ~/.ssh/authorized_keys as
+# command="/path/to/vtysh_wrapper" <KEY>
+# to only allow calls to vtysh via that key
+#
+# useful if vtysh needs root permissions but you
+# don't want a complete root login via SSH
+#
+
+set -- $SSH_ORIGINAL_COMMAND
+
+# check for the first argument to be something like vtysh, with or without path
+case "$1" in
+    *vtysh)
+	VTYSH="$1"
+	;;
+    *)
+	echo "need 'vtysh' as first parameter"
+	exit 1
+	;;
+esac
+shift
+
+# check for the second argument to be '-c'
+case "$1" in
+    -c)
+	;;
+    *)
+	echo "need '-c' as second parameter"
+	exit 1
+	;;
+esac
+shift
+
+# concatenate all other parameters and remove quoting, if present
+ARGS="$*"
+IFS=\'
+set -- "$ARGS"
+IFS=\ 
+ARGS="$*"
+IFS=\"
+set -- "$ARGS"
+IFS=\ 
+ARGS="$*"
+
+# wrap call to vtysh
+"$VTYSH" -c "$ARGS"
