@@ -2,7 +2,7 @@
 #
 # vtysh_scanner - print a network graph of routing information
 # 
-# Copyright (C) 2011,2014  Christian Garbs <mitch@cgarbs.de>
+# Copyright (C) 2011,2014,2015  Christian Garbs <mitch@cgarbs.de>
 # Licensed under GNU GPL 3 or later.
 # 
 use strict;
@@ -10,6 +10,7 @@ use warnings;
 
 ### global configuration
 my $SSH = '';
+my $ALLOW_SELF = 1;  # set to 0 to remove self-references, eg. in lines like AS1 AS2 AS2 AS2 AS3 skip the 'AS2 AS2' pairs
 
 ### subroutines
 
@@ -143,7 +144,11 @@ foreach my $neighbor (@neighbors)
 	    if (defined $last_as)
 	    {
 		my ($from, $to) = sort ($as, $last_as);
-		$peering{"$from:$to"}++;
+		# skip self-references (eg. prepended paths to downgrade a route)
+		if ($ALLOW_SELF or $from ne $to)
+		{
+		    $peering{"$from:$to"}++;
+		}
 	    }
 	    $as{$as}++;
 	    $last_as = $as;
