@@ -28,8 +28,9 @@ sub read_vtysh_paths($$)
 	if ($line =~ /^(${marker}.*) i/)
 	{
 	    next if length($1) < $startcol;
-	    push @ret, substr($1, $startcol);
-
+	    my $as = substr($1, $startcol);
+	    $as =~ s/^[^0-9]+//;
+	    push @ret, $as;
 	}
 	elsif ($line =~ /Path/)
 	{
