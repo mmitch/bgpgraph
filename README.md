@@ -7,7 +7,7 @@ bgpgraph - print a network graph of routing information
 license/copyright
 -----------------
 
-Copyright (C) 2011  Christian Garbs <mitch@cgarbs.de>
+Copyright (C) 2011,2014,2015  Christian Garbs <mitch@cgarbs.de>  
 Licensed under GNU GPL 3 or later.
 
 
@@ -28,7 +28,7 @@ usage
 -----
 
 Just run ``vtysh_scanner > some_file.png`` to generate the graph.
-You need read-access with vtysh, of course.
+You need read-access with ``vtysh``, of course.
 
 
 ### optional features
