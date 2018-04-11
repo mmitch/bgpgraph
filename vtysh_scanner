@@ -13,14 +13,13 @@ my $ALLOW_SELF = 1;  # set to 0 to remove self-references, eg. in lines like AS1
 
 ### subroutines
 
-sub read_vtysh_paths($)
+sub read_vtysh_paths()
 # read path information from vtysh
 {
-    local *FH = shift;
     my @ret;
 
     my $startcol = 0;
-    while (my $line = <FH>)
+    while (my $line = <STDIN>)
     {
 	if ($line =~ /^((\*>?)\s.*) i/)
 	{
@@ -43,12 +42,6 @@ sub read_vtysh_paths($)
     return @ret;
 }
 
-sub exec_vtysh($)
-# generate a vtysh commandline		    
-{
-    return sprintf("vtysh -c '%s'|", @_);
-}
-
 sub show_help()
 # print help text
 {
@@ -56,11 +49,12 @@ sub show_help()
 usage:  $0 <local AS id>
         $0 [-h]--help]
 
-examples:
-   $0 -h      show help text
-   $0 65001   process data for AS 65001
+$0 expects the output of `vtysh -c 'show ip bgp'` on stdin.
+$0 writes a PNG file containing the graph to stdout.
 
-output is a PNG file on stdout, redirect it somewhere
+examples:
+   vtysh -c 'show ip bgp' | $0 65001     process data for AS 65001
+   $0 -h                                 show help text
 EOF
     ;
 }
@@ -109,9 +103,7 @@ my %as;
 
 my %active;
 
-open ACTIVE, exec_vtysh('show ip bgp') or die "can't open vtysh active routes: $!";
-
-foreach my $line (read_vtysh_paths(*ACTIVE))
+foreach my $line (read_vtysh_paths())
 {
     my $last_as = undef;
     foreach my $as ( $my_as, split (/ /, $line->{PATH}) )
@@ -136,7 +128,6 @@ foreach my $line (read_vtysh_paths(*ACTIVE))
 	$last_as = $as;
     }
 }
-close ACTIVE or die "can't close vtysh active routes: $!";
 
 
 ### print graph

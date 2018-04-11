@@ -27,8 +27,8 @@ dependencies
 usage
 -----
 
-Just run ``vtysh_scanner > some_file.png`` to generate the graph.
-You need read-access with ``vtysh``, of course.
+Just run ``vtysh -c 'show ip bgp' | vtysh_scanner > some_file.png`` to
+generate the graph.  You need read-access with ``vtysh``, of course.
 
 
 ### optional features
