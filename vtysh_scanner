@@ -2,7 +2,7 @@
 #
 # vtysh_scanner - print a network graph of routing information
 # 
-# Copyright (C) 2011,2014,2015  Christian Garbs <mitch@cgarbs.de>
+# Copyright (C) 2011,2014,2015,2018  Christian Garbs <mitch@cgarbs.de>
 # Licensed under GNU GPL 3 or later.
 # 
 use strict;
@@ -81,8 +81,8 @@ my $my_as = $ARGV[0];
 my %config;
 if ( -r 'info.conf')
 {
-    open CONFIG, '<', 'info.conf' or die "can't open `info.conf': $!";
-    while (my $line = <CONFIG>)
+    open my $config, '<', 'info.conf' or die "can't open `info.conf': $!";
+    while (my $line = <$config>)
     {
 	$line =~ s/^\s+//;
 	$line =~ s/\s+$//;
@@ -92,7 +92,7 @@ if ( -r 'info.conf')
 	$config{$as}->{NAME} = $name if defined $name;
 	$config{$as}->{TYPE} = $type if defined $type;
     }
-    close CONFIG or die "can't close `info.conf': $!";
+    close $config or die "can't close `info.conf': $!";
 }
 
 
