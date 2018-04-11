@@ -7,7 +7,7 @@ bgpgraph - print a network graph of routing information
 license/copyright
 -----------------
 
-Copyright (C) 2011,2014,2015  Christian Garbs <mitch@cgarbs.de>  
+Copyright (C) 2011,2014,2015,2018  Christian Garbs <mitch@cgarbs.de>  
 Licensed under GNU GPL 3 or later.
 
 
@@ -21,14 +21,14 @@ dependencies
 ------------
 
 - ``vtysh`` from the [quagga](https://www.quagga.net/) package
-- the [GraphViz](https://metacpan.org/pod/GraphViz) perl module
+- ``dot`` from the [GraphViz](https://www.graphviz.org/) package
 
 
 usage
 -----
 
-Just run ``vtysh -c 'show ip bgp' | vtysh_scanner > some_file.png`` to
-generate the graph.  You need read-access with ``vtysh``, of course.
+Run ``vtysh -c 'show ip bgp' | vtysh_scanner | dot -Tpng > graph.png``
+to generate a graph.  You need read-access with ``vtysh``, of course.
 
 
 ### optional features

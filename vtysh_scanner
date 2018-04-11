@@ -46,15 +46,14 @@ sub show_help()
 # print help text
 {
     print<<"EOF";
-usage:  $0 <local AS id>
-        $0 [-h]--help]
+usage:  vtysh_scanner <local AS id>
+        vtysh_scanner [-h|--help]
 
-$0 expects the output of `vtysh -c 'show ip bgp'` on stdin.
-$0 writes a PNG file containing the graph to stdout.
+vtysh_scanner expects the output of `vtysh -c 'show ip bgp'` on stdin.
+vtysh_scanner writes a dot(1) file describing the graph to stdout.
 
-examples:
-   vtysh -c 'show ip bgp' | $0 65001     process data for AS 65001
-   $0 -h                                 show help text
+example:
+   vtysh -c 'show ip bgp' | vtysh_scanner 65001 | dot -Tpng > graph.png
 EOF
     ;
 }
@@ -132,34 +131,49 @@ foreach my $line (read_vtysh_paths())
 
 ### print graph
 
-use GraphViz;
-
-my $g = GraphViz->new();
+print "strict digraph {\n";
 
 foreach my $as (keys %as)
 {
-    $g->add_node($as);
-    $g->add_node($as, label => "$as\n$config{$as}->{NAME}")  if exists $config{$as}->{NAME};
-    $g->add_node($as, style => 'filled', fillcolor => 'lightgrey') if exists $config{$as}->{TYPE};
-    $g->add_node($as, style => 'filled', fillcolor => 'lightblue') if $as == $my_as;
+    my ($node_id, $label, $fillcolor);
+
+    $node_id = $as;
+    $label = "$as\n$config{$as}->{NAME}" if exists $config{$as}->{NAME};
+    $fillcolor = 'lightgrey' if exists $config{$as}->{TYPE};
+    $fillcolor = 'lightblue' if $as == $my_as;
+
+    my $attr_list = '';
+
+    if (defined $label) {
+	 $attr_list .= sprintf ' label="%s"', $label;
+    }
+
+    if (defined $fillcolor) {
+	$attr_list .= sprintf ' style="filled" fillcolor="%s"', $fillcolor;
+    }
+
+    $attr_list = ' [' . $attr_list . ' ]' if $attr_list;
+
+    printf "  %s%s;\n", $node_id, $attr_list;
 }
+
+print "\n";
 
 foreach my $peering (keys %peering)
 {
     die unless $peering =~ /(.*):(.*)/;
     if (exists $active{$peering})
     {
-	$g->add_edge($1 => $2);
+	printf "  %s -> %s;\n", $1, $2;
     }
     elsif (exists $active{"$2:$1"})
     {
-	$g->add_edge($2 => $1);
+	printf "  %s -> %s;\n", $2, $1;
     }
     else
     {
-	$g->add_edge($1 => $2, 'dir' => 'none', weight => 0, color => '0, 0, 0.5');
+	printf "  %s -> %s [ dir=\"none\" weight=0 color=\"0, 0, 0.5\" ];\n", $1, $2;
     }
 }
 
-print $g->as_png;
-
+print "}\n";
