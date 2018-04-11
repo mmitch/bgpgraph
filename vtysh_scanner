@@ -14,26 +14,30 @@ my $ALLOW_SELF = 1;  # set to 0 to remove self-references, eg. in lines like AS1
 
 ### subroutines
 
-sub read_vtysh_paths($$)
+sub read_vtysh_paths($)
 # read path information from vtysh
-# figure out, on which column the paths begin
 {
     local *FH = shift;
-    my $marker = shift;
     my @ret;
 
     my $startcol = 0;
     while (my $line = <FH>)
     {
-	if ($line =~ /^(${marker}.*) i/)
+	if ($line =~ /^((\*>?)\s.*) i/)
 	{
 	    next if length($1) < $startcol;
+
+	    # check whether that line is active
+	    my $active = $2 eq '*>';
+	    
 	    my $as = substr($1, $startcol);
+	    # skip first element, that is always us
 	    $as =~ s/^[^0-9]+//;
-	    push @ret, $as;
+	    push @ret, { ACTIVE => $active, PATH => $as };
 	}
 	elsif ($line =~ /Path/)
 	{
+	    # figure out on which column the paths begin
 	    $startcol = index $line, 'Path';
 	}
     }
@@ -57,13 +61,14 @@ sub show_help()
 # print help text
 {
     print<<"EOF";
-usage:  $0 [-h|--help] [<SSH remote connection arguments>]
+usage:  $0 {-h]--help}
+usage:  $0 <local AS id> [<SSH remote connection arguments>]
 
 examples:
-   $0                           local data
-   $0 -h                        help text
-   $0 root\@somewhere.net        remote data
-   $0 '-p 1234 somewhere.net'   remote data with extra SSH arguments
+   $0 -h                              help text
+   $0 65001                           local data for AS 65001
+   $0 65001 root\@somewhere.net        remote data for AS 65001
+   $0 65001 '-p 1234 somewhere.net'   remote data with extra SSH arguments
 
 output is a PNG file on stdout, redirect it somewhere
 EOF
@@ -73,20 +78,22 @@ EOF
 
 ### parse commandline arguments
 
-if (@ARGV > 1)
+if (@ARGV < 1 or @ARGV > 2)
 {
     show_help();
     exit 1;
 }
 
-if (defined $ARGV[0])
+if ($ARGV[0] eq '-h' or $ARGV[0] eq '--help' )
 {
-    if ($ARGV[0] eq '-h' or $ARGV[0] eq '--help' )
-    {
-	show_help;
-	exit 0;
-    }
-    $SSH = $ARGV[0];
+    show_help;
+    exit 0;
+}
+my $my_as = $ARGV[0];
+
+if (defined $ARGV[1])
+{
+    $SSH = $ARGV[1];
 }
 
 
@@ -112,63 +119,36 @@ if ( -r 'info.conf')
 
 ### collect information
 
-my @neighbors;
-
-open NEIGHBORS, exec_vtysh('show ip bgp summary') or die "can't open vtysh summary: $!";
-my $my_as;
-while (my $line = <NEIGHBORS>)
-{
-    if ($line =~ /^(\d+\.\d+\.\d+\.\d+\s)/)
-    {
-	push @neighbors, $1;
-    }
-    elsif ($line =~ /local AS number (\d+)/)
-    {
-	$my_as = $1;
-    }
-}
-close NEIGHBORS or die "can't close vtysh summary: $!";
-
 my %peering;
 my %as;
-
-foreach my $neighbor (@neighbors)
-{
-    open ROUTES, exec_vtysh("show ip bgp neighbors $neighbor routes") or die "can't open vtysh routes for $neighbor: $!";
-
-    # pick only valid routes
-    foreach my $line (read_vtysh_paths(*ROUTES, '\*'))
-    {
-	my $last_as = undef;
-	foreach my $as ( $my_as, split (/ /, $line) )
-	{
-	    if (defined $last_as)
-	    {
-		my ($from, $to) = sort ($as, $last_as);
-		# skip self-references (eg. prepended paths to downgrade a route)
-		if ($ALLOW_SELF or $from ne $to)
-		{
-		    $peering{"$from:$to"}++;
-		}
-	    }
-	    $as{$as}++;
-	    $last_as = $as;
-	}
-    }
-    close ROUTES or die "can't close vtysh routes for $neighbor: $!";
-}
 
 my %active;
 
 open ACTIVE, exec_vtysh('show ip bgp') or die "can't open vtysh active routes: $!";
 
 # pick only valid and best routes
-foreach my $line (read_vtysh_paths(*ACTIVE, '\*>'))
+foreach my $line (read_vtysh_paths(*ACTIVE))
 {
     my $last_as = undef;
-    foreach my $as ( $my_as, split (/ /, $line) )
+    foreach my $as ( $my_as, split (/ /, $line->{PATH}) )
     {
-	$active{"${last_as}:${as}"}++ if defined $last_as;
+	$as{$as}++;
+	
+	if (defined $last_as)
+	{
+	    # undirected peerings are sorted to skip duplicates
+	    my ($from, $to) = sort ($as, $last_as);
+	    
+	    # skip self-references (eg. prepended paths to downgrade a route)
+	    if ($ALLOW_SELF or $from ne $to)
+	    {
+		$peering{"$from:$to"}++;
+	    }
+
+	    # active peerings are directed, they can exist only once
+	    $active{"${last_as}:${as}"}++ if $line->{ACTIVE};
+	}
+	    
 	$last_as = $as;
     }
 }
