@@ -9,7 +9,6 @@ use strict;
 use warnings;
 
 ### global configuration
-my $SSH = '';
 my $ALLOW_SELF = 1;  # set to 0 to remove self-references, eg. in lines like AS1 AS2 AS2 AS2 AS3 skip the 'AS2 AS2' pairs
 
 ### subroutines
@@ -47,28 +46,19 @@ sub read_vtysh_paths($)
 sub exec_vtysh($)
 # generate a vtysh commandline		    
 {
-    if ($SSH eq '')
-    {
-	return sprintf("vtysh -c '%s'|", @_);
-    }
-    else
-    {
-	return sprintf("ssh %s vtysh -c \"'%s'\"|", $SSH, @_);
-    }
+    return sprintf("vtysh -c '%s'|", @_);
 }
 
 sub show_help()
 # print help text
 {
     print<<"EOF";
-usage:  $0 {-h]--help}
-usage:  $0 <local AS id> [<SSH remote connection arguments>]
+usage:  $0 <local AS id>
+        $0 [-h]--help]
 
 examples:
-   $0 -h                              help text
-   $0 65001                           local data for AS 65001
-   $0 65001 root\@somewhere.net        remote data for AS 65001
-   $0 65001 '-p 1234 somewhere.net'   remote data with extra SSH arguments
+   $0 -h      show help text
+   $0 65001   process data for AS 65001
 
 output is a PNG file on stdout, redirect it somewhere
 EOF
@@ -78,7 +68,7 @@ EOF
 
 ### parse commandline arguments
 
-if (@ARGV < 1 or @ARGV > 2)
+if (@ARGV != 1)
 {
     show_help();
     exit 1;
@@ -90,11 +80,6 @@ if ($ARGV[0] eq '-h' or $ARGV[0] eq '--help' )
     exit 0;
 }
 my $my_as = $ARGV[0];
-
-if (defined $ARGV[1])
-{
-    $SSH = $ARGV[1];
-}
 
 
 ### read configuration
@@ -126,7 +111,6 @@ my %active;
 
 open ACTIVE, exec_vtysh('show ip bgp') or die "can't open vtysh active routes: $!";
 
-# pick only valid and best routes
 foreach my $line (read_vtysh_paths(*ACTIVE))
 {
     my $last_as = undef;
