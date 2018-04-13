@@ -1,14 +1,15 @@
 strict digraph {
   12202 [ label="12202
-them" ];
+beta" ];
   12203;
   12204;
   12205;
   12206;
   12207 [ label="12207
-us" style="filled" fillcolor="lightblue" ];
+alpha" style="filled" fillcolor="lightblue" ];
   12208;
-  12209;
+  12209 [ label="12209
+gamma" style="filled" fillcolor="lightgrey" ];
   12220;
 
   12202 -> 12203 [ dir="none" weight=0 color="0, 0, 0.5" ];
