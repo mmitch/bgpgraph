@@ -133,7 +133,7 @@ foreach my $line (read_vtysh_paths())
 
 print "strict digraph {\n";
 
-foreach my $as (keys %as)
+foreach my $as (sort keys %as)
 {
     my ($node_id, $label, $fillcolor);
 
@@ -159,7 +159,7 @@ foreach my $as (keys %as)
 
 print "\n";
 
-foreach my $peering (keys %peering)
+foreach my $peering (sort keys %peering)
 {
     die unless $peering =~ /(.*):(.*)/;
     if (exists $active{$peering})
