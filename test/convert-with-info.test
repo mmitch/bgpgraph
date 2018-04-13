@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# given
+make -s testclean
+cp given_info info.conf
+
+# when
+../vtysh_bgp_to_dot 12207 < given_vtysh_output > actual_output
+
+# then
+diff -Narup expected_dot_with_info actual_output
+

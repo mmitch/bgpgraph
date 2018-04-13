@@ -1,2 +1,8 @@
+.PHONY: test
+
+test:
+	cd test && $(MAKE) -s test
+
 clean:
-	rm *~
+	rm -f *~
+	cd test && $(MAKE) clean
