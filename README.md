@@ -1,6 +1,7 @@
 bgpgraph - print a network graph of routing information
 =======================================================
 
+[![Build Status](https://travis-ci.org/mmitch/bgpgraph.svg?branch=master)](https://travis-ci.org/mmitch/bgpgraph)
 [![GPL 3+](https://img.shields.io/badge/license-GPL%203%2B-blue.svg)](http://www.gnu.org/licenses/gpl-3.0-standalone.html)
 
 
