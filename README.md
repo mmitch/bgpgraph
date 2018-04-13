@@ -39,7 +39,7 @@ will be the generated graph.  You need read-access with ``vtysh``, of
 course.
 
 
-### optional features
+### add information to the nodes in the graph
 
 If there is an ``info.conf`` in your current directory, it will be
 read to spice up the graph.  The format of ``info.conf`` is whitespace
@@ -50,7 +50,7 @@ delimited fields:
 - Third field optionally contains a flag for marking a node in the output.
 
 
-#### Example ``info.conf``
+#### example ``info.conf``
 
 ```
 60001  this_is_me
@@ -61,3 +61,43 @@ delimited fields:
 
 This configuration will add labels to the graph nodes 60001 to 60004
 and mark the node 60003 as important.
+
+
+### add status information to the graph
+
+If you want to add additional information to the generated graph, you
+could use ``convert`` from the [Imagemagick](http://imagemagick.org/)
+package like this:
+
+```shell
+vtysh -c 'show ip bgp' | ./vtysh_bgp_to_dot 60001 | dot -Tpng | \
+convert - \
+        -gravity Southwest -background white -splice 0x25 \
+        -annotate +0+2 "  `hostname -f` - `date`  " graph.png
+```
+
+This will add a status text to the bottom of the graph containing the
+hostname and the current date.
+
+
+### remote operation
+
+As ``vtysh_bgp_to_dot`` reads from stdin, it does not need to be
+installed on your router.
+
+If you have SSH access to the router, you can execute ``vtysh``
+remotely and execute everything else locally like this:
+
+```shell
+ssh user@router 'vtysh -c "show ip bgp"' | vtysh_bgp_to_dot | ...
+```
+
+You can use the ``command=`` setting in ``~/.ssh/authorized_keys`` to
+enable key-based login without password while restricting access to
+the ``vtysh`` command.
+
+Instead of SSH you could also use ``netcat`` and ``(x)inetd`` or a
+cronjob plus some sort of network file exchange or even send the
+``vtysh`` output by email and process it with ``procmail`` or
+``maildrop``.
+
