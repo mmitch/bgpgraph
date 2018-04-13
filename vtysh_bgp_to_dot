@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 #
-# vtysh_scanner - print a network graph of routing information
+# vtysh_bgp_to_dot - print a network graph of routing information
 # 
 # Copyright (C) 2011,2014,2015,2018  Christian Garbs <mitch@cgarbs.de>
 # Licensed under GNU GPL 3 or later.
@@ -46,14 +46,14 @@ sub show_help()
 # print help text
 {
     print<<"EOF";
-usage:  vtysh_scanner <local AS id>
-        vtysh_scanner [-h|--help]
+usage:  vtysh_bgp_to_dot <local AS>
+        vtysh_bgp_to_dot [-h|--help]
 
-vtysh_scanner expects the output of `vtysh -c 'show ip bgp'` on stdin.
-vtysh_scanner writes a dot(1) file describing the graph to stdout.
+vtysh_bgp_to_dot expects the output of `vtysh -c 'show ip bgp'` on stdin.
+vtysh_bgp_to_dot writes a dot(1) file describing the graph to stdout.
 
 example:
-   vtysh -c 'show ip bgp' | vtysh_scanner 65001 | dot -Tpng > graph.png
+   vtysh -c 'show ip bgp' | vtysh_bgp_to_dot 65001 | dot -Tpng > graph.png
 EOF
     ;
 }

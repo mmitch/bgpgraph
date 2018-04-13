@@ -27,8 +27,15 @@ dependencies
 usage
 -----
 
-Run ``vtysh -c 'show ip bgp' | vtysh_scanner | dot -Tpng > graph.png``
-to generate a graph.  You need read-access with ``vtysh``, of course.
+Run
+
+```shell
+vtysh -c 'show ip bgp' | vtysh_bgp_to_dot 1234 | dot -Tpng > graph.png
+```
+
+to generate a graph, where ``1234`` is your local AS and ``graph.png``
+will be the generated graph.  You need read-access with ``vtysh``, of
+course.
 
 
 ### optional features
