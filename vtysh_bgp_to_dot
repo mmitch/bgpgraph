@@ -46,14 +46,15 @@ sub show_help()
 # print help text
 {
     print<<"EOF";
-usage:  vtysh_bgp_to_dot <local AS>
+usage:  vtysh_bgp_to_dot [local AS]
         vtysh_bgp_to_dot [-h|--help]
 
 vtysh_bgp_to_dot expects the output of `vtysh -c 'show ip bgp'` on stdin.
 vtysh_bgp_to_dot writes a dot(1) file describing the graph to stdout.
+When no local AS is given, the local node will not be included in the graph.
 
 example:
-   vtysh -c 'show ip bgp' | vtysh_bgp_to_dot 65001 | dot -Tpng > graph.png
+   vtysh -c 'show ip bgp' | vtysh_bgp_to_dot 12207 | dot -Tpng > graph.png
 EOF
     ;
 }
@@ -61,17 +62,24 @@ EOF
 
 ### parse commandline arguments
 
-if (@ARGV != 1)
+if (@ARGV > 1)
 {
     show_help();
     exit 1;
 }
 
-if ($ARGV[0] eq '-h' or $ARGV[0] eq '--help' )
+if (@ARGV == 1 and $ARGV[0] =~ /^(-h|--help)$/)
 {
     show_help;
     exit 0;
 }
+
+if (@ARGV == 1 and $ARGV[0] =~ /^-/)
+{
+    show_help;
+    exit 1;
+}
+
 my $my_as = $ARGV[0];
 
 
@@ -105,7 +113,9 @@ my %active;
 foreach my $line (read_vtysh_paths())
 {
     my $last_as = undef;
-    foreach my $as ( $my_as, split (/ /, $line->{PATH}) )
+    my @path = split (/ /, $line->{PATH});
+    unshift @path, $my_as if defined $my_as;
+    foreach my $as (@path)
     {
 	$as{$as}++;
 	
@@ -140,7 +150,7 @@ foreach my $as (sort keys %as)
     $node_id = $as;
     $label = "$as\n$config{$as}->{NAME}" if exists $config{$as}->{NAME};
     $fillcolor = 'lightgrey' if exists $config{$as}->{TYPE};
-    $fillcolor = 'lightblue' if $as == $my_as;
+    $fillcolor = 'lightblue' if defined $my_as and $as eq $my_as;
 
     my $attr_list = '';
 

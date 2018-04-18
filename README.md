@@ -39,6 +39,16 @@ will be the generated graph.  You need read-access with ``vtysh``, of
 course.
 
 
+### excluding the local node them the graph
+
+If you pass no local AS to ``vtysh_bgp_to_dot``, the local node will
+not be included in the generated graph:
+
+```shell
+vtysh -c 'show ip bgp' | vtysh_bgp_to_dot | dot -Tpng > graph_without_local_node.png
+```
+
+
 ### add information to the nodes in the graph
 
 If there is an ``info.conf`` in your current directory, it will be

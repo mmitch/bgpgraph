@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# given
+make -s testclean
+
+# when
+../vtysh_bgp_to_dot < given_vtysh_output > actual_output
+
+# then
+diff -Narup expected_dot_without_local_node actual_output
+
