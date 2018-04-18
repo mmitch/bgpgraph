@@ -89,8 +89,9 @@ while (my $line = <STDIN>)
 	my $active = $2 eq '*>';
 	
 	my $as = substr($1, $startcol);
-	# skip first element, that is always us
-	$as =~ s/^[^0-9]+//;
+	# skip initial whitespace
+	$as =~ s/^\s+//;
+	
 	push @lines, { ACTIVE => $active, PATH => $as };
     }
     elsif ($line =~ /Path/)
