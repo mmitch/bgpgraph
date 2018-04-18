@@ -102,6 +102,16 @@ while (my $line = <STDIN>)
 }
 
 
+### prepend local AS is present
+
+if (defined $my_as)
+{
+    foreach my $line (@lines) {
+	$line->{PATH} = "$my_as " . $line->{PATH};
+    }
+}
+
+
 ### parse paths
 
 my %peering;
@@ -112,7 +122,6 @@ foreach my $line (@lines)
 {
     my $last_as = undef;
     my @path = split (/ /, $line->{PATH});
-    unshift @path, $my_as if defined $my_as;
     foreach my $as (@path)
     {
 	$as{$as}++;
