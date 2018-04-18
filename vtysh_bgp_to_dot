@@ -13,35 +13,6 @@ my $ALLOW_SELF = 1;  # set to 0 to remove self-references, eg. in lines like AS1
 
 ### subroutines
 
-sub read_vtysh_paths()
-# read path information from vtysh
-{
-    my @ret;
-
-    my $startcol = 0;
-    while (my $line = <STDIN>)
-    {
-	if ($line =~ /^((\*>?)\s.*) i/)
-	{
-	    next if length($1) < $startcol;
-
-	    # check whether that line is active
-	    my $active = $2 eq '*>';
-	    
-	    my $as = substr($1, $startcol);
-	    # skip first element, that is always us
-	    $as =~ s/^[^0-9]+//;
-	    push @ret, { ACTIVE => $active, PATH => $as };
-	}
-	elsif ($line =~ /Path/)
-	{
-	    # figure out on which column the paths begin
-	    $startcol = index $line, 'Path';
-	}
-    }
-    return @ret;
-}
-
 sub show_help()
 # print help text
 {
@@ -103,14 +74,40 @@ if ( -r 'info.conf')
 }
 
 
-### collect information
+### parse vtysh output
+
+my @lines;
+
+my $startcol = 0;
+while (my $line = <STDIN>)
+{
+    if ($line =~ /^((\*>?)\s.*) i/)
+    {
+	next if length($1) < $startcol;
+	
+	# check whether that line is active
+	my $active = $2 eq '*>';
+	
+	my $as = substr($1, $startcol);
+	# skip first element, that is always us
+	$as =~ s/^[^0-9]+//;
+	push @lines, { ACTIVE => $active, PATH => $as };
+    }
+    elsif ($line =~ /Path/)
+    {
+	# figure out on which column the paths begin
+	$startcol = index $line, 'Path';
+    }
+}
+
+
+### parse paths
 
 my %peering;
 my %as;
-
 my %active;
 
-foreach my $line (read_vtysh_paths())
+foreach my $line (@lines)
 {
     my $last_as = undef;
     my @path = split (/ /, $line->{PATH});
