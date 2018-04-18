@@ -39,7 +39,7 @@ will be the generated graph.  You need read-access with ``vtysh``, of
 course.
 
 
-### excluding the local node them the graph
+### excluding the local node from the graph
 
 If you pass no local AS to ``vtysh_bgp_to_dot``, the local node will
 not be included in the generated graph:
