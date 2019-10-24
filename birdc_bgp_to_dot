@@ -1,0 +1,334 @@
+#!/usr/bin/perl
+#
+# birdc_bgp_to_dot - print a network graph of routing information
+# 
+# Copyright (C) 2019 Christian Garbs <mitch@cgarbs.de>
+# Licensed under GNU GPL 3 or later.
+#
+# This file is part of bgpgraph.
+#
+# bgpgraph is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# bgpgraph is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with bgpgraph.  If not, see <http://www.gnu.org/licenses/>.
+#
+use strict;
+use warnings;
+
+use constant DEFAULT_FILLCOLOR      => 'white';
+use constant DEFAULT_AS_FILLCOLOR   => 'lightgrey';
+use constant DEFAULT_HIGHLIGHTCOLOR => 'lightblue';
+
+# color array to rotate
+my @colors = (
+    '#800000',
+    '#008000',
+    '#008080',
+    '#800080',
+    '#808000',
+    '#000080',
+    );
+
+### subroutines
+
+# print help text
+sub show_help() {
+    print<<'EOF';
+usage:  birdc_bgp_to_dot [-c <conf>]
+        birdc_bgp_to_dot [-h|--help]
+
+birdc_bgp_to_dot expects the output of `birdc`'s `show route` command on stdin.
+birdc_bgp_to_dot writes a GraphViz graph file describing the graph to stdout.
+A config 
+
+examples:
+  # basic usage
+  $ echo 'show route' | birdc | birdc_bgp_to_dot | fdp -Tpng > graph.png
+
+  # IPv6 with configuration
+  $ echo 'show route' | birdc6 | birdc_bgp_to_dot -c my.conf \
+       | fdp -Tpng > graph.png
+
+  # both IPv4 and IPv6
+  $ ( echo 'show route' | birdc; echo 'show route' | birdc6) \
+       | birdc_bgp_to_dot | fdp -Tpng > graph.png
+EOF
+    ;
+}
+
+# get next color from color list
+sub get_next_color() {
+    my $color = shift @colors;
+    push @colors, $color;
+    return $color;
+}
+
+### parse commandline arguments
+
+my $configfile = undef;
+if (@ARGV == 1 and $ARGV[0] =~ /^(-h|--help)$/) {
+    # help requestet: exit with success
+    show_help;
+    exit 0;
+}
+elsif (@ARGV == 2 and $ARGV[0] =~ /^-c/) {
+    $configfile = $ARGV[1];
+}
+elsif (@ARGV > 0) {
+    # every other option given means unknown commandline arguments: exit with failure
+    show_help;
+    exit 1;
+}
+
+my $my_as = $ARGV[0];
+
+
+### read configuration
+
+my %config;
+if (defined $configfile) {
+    open my $config, '<', $configfile or die "can't open `$configfile': $!";
+    while (my $line = <$config>)
+    {
+	$line =~ s/^\s+//;
+	$line =~ s/\s+$//;
+	next if $line eq '';
+	next if $line =~ /^#/;
+
+	my ($command, $arg1, $arg2) = split /\s+/, $line, 3;
+	$command = lc $command // '';
+	$arg1 = $arg1 // '';
+	$arg2 = $arg2 // '';
+	if ($command eq 'label') {
+	    die "object id missing in config line $.: $line\n" unless $arg1;
+	    die "label text missing in config line $.: $line\n" unless $arg2;
+	    $config{$arg1}->{LABEL} = $arg2;
+	}
+	elsif ($command eq 'color') {
+	    die "object id missing in config line $.: $line\n" unless $arg1;
+	    $arg2 = $arg2 || DEFAULT_HIGHLIGHTCOLOR;
+	    $config{$arg1}->{COLOR} = $arg2;
+	}
+	elsif ($command eq 'same') {
+	    die "object id 1 missing in config line $.: $line\n" unless $arg1;
+	    die "object id 2 missing in config line $.: $line\n" unless $arg2;
+	    push @{$config{$arg1}->{SAME}}, [$arg1, $arg2];
+	}
+	else {
+	    die "unknown command in config line $.: $line\n";
+	}
+    }
+    close $config or die "can't close `$configfile': $!";
+}
+
+
+### parse birdc output
+
+my %net;
+my %router;
+my %as;
+
+my $net;
+while (my $line = <STDIN>)
+{
+    #                       $1 optional                $2                         $3 opt    $4            $5   $6
+    #                      (IP/PREFIX      )     via  (ROUTER     )   on         (sel)     (pref)        (AS) (type)
+    next unless $line =~ m#([0-9a-f:.]+/\d+)?\s+via\s+([0-9a-f:.]+)\s+on\s+.*\]\s(\*)?\s*\((\d+)\)\s+\[AS(\d+)(.)\]#;
+    $net = $1 if defined $1;
+
+    my ($router, $pref, $asn, $type) = ($2, $4, $5, $6);
+    my $active = defined $3;
+
+
+    # store net
+    my $net_obj = $net{$net} // { NET => $net };
+    $net{$net} = $net_obj;
+
+    # store as (part 2)
+    my $as_obj = $as{$asn} // { ASN => $asn};
+    $as{$asn} = $as_obj;
+    $as_obj->{NETS}->{$net}++;
+
+    # store router
+    my $router_obj = $router{$router};
+    if (! defined $router_obj ) {
+	$router_obj = {
+	    COLOR => get_next_color(),
+	    IP    => $router,
+	};
+	$router{$router} = $router_obj;
+    }
+    if ($active) {
+	$router_obj->{NETS}->{$net}++;
+    }
+}
+
+
+### sort hashes
+
+my @nets    = map { $net{$_}    } sort keys %net;
+my @ass     = map { $as{$_}     } sort keys %as;
+my @routers = map { $router{$_} } sort keys %router;
+
+
+### generate ids
+
+my $net_id = 0;
+foreach my $net_obj (@nets) {
+    $net_obj->{ID} = sprintf 'net%03d', $net_id++;
+}
+
+my $as_id = 0;
+foreach my $as_obj (@ass) {
+    $as_obj->{ID} = sprintf 'as%03d', $as_id++;
+}
+
+my $router_id = 0;
+foreach my $router_obj (@routers) {
+    $router_obj->{ID} = sprintf 'router%03d', $as_id++;
+}
+
+
+### set labels
+
+foreach my $net_obj (@nets) {
+    my $net = $net_obj->{NET};
+    my $label = $config{$net}->{LABEL};
+    if (defined $label) {
+	$label = "$net\n$label";
+    }
+    else {
+	$label = $net;
+    }
+    $net_obj->{LABEL} = $label;
+}
+
+foreach my $as_obj (@ass) {
+    my $asn = $as_obj->{ASN};
+    my $label = $config{$asn}->{LABEL};
+    if (defined $label) {
+	$label = "AS $asn\n$label";
+    }
+    else {
+	$label = "AS $asn";
+    }
+    $as_obj->{LABEL} = $label;
+}
+
+foreach my $router_obj (@routers) {
+    my $ip = $router_obj->{IP};
+    my $label = $config{$ip}->{LABEL};
+    if (defined $label) {
+	$label = "$label\n$ip";
+    }
+    else {
+	$label = $ip;
+    }
+    $router_obj->{LABEL} = $label;
+}
+
+my $me_label = $config{ME}->{LABEL};
+if (defined $me_label) {
+    $me_label = "ME\n$me_label";
+}
+else {
+    $me_label = 'ME';
+}
+
+
+### set fill colors
+
+foreach my $net_obj (@nets) {
+    $net_obj->{FILLCOLOR} = $config{$net_obj->{NET}}->{COLOR} // DEFAULT_FILLCOLOR;
+}
+
+foreach my $as_obj (@ass) {
+    $as_obj->{FILLCOLOR} = $config{$as_obj->{ASN}}->{COLOR} // DEFAULT_AS_FILLCOLOR;
+}
+
+foreach my $router_obj (@routers) {
+    $router_obj->{FILLCOLOR} = $config{$router_obj->{IP}}->{COLOR} // DEFAULT_FILLCOLOR;
+}
+
+my $me_fillcolor = $config{ME}->{COLOR} // DEFAULT_FILLCOLOR;
+
+
+### set route colors
+
+foreach my $router_obj (@routers) {
+    my $color = $router_obj->{COLOR};
+    foreach my $net (sort keys %{$router_obj->{NETS}}) {
+	$net{$net}->{COLOR} = $color;
+    }
+}
+
+
+### print graph
+
+print "strict digraph {\n";
+print "  splines=\"compound\";\n";
+
+printf "  ME [ label=\"%s\", penwidth=2, fillcolor=\"%s\" ];\n",
+    $me_label,
+    $me_fillcolor;
+
+print "\n";
+
+foreach my $as_obj (@ass)
+{
+    printf "  subgraph cluster_%s {\n", $as_obj->{ID};
+
+    printf "    label=\"%s\";\n", $as_obj->{LABEL};
+    printf "    fillcolor=\"%s\";\n", $as_obj->{FILLCOLOR};
+    printf "    style=\"filled\";\n";
+
+    foreach my $net (sort keys %{$as_obj->{NETS}})
+    {
+	my $net_obj = $net{$net};
+	printf "    %s [ label=\"%s\", shape=folder, style=\"filled\", fillcolor=\"%s\", color=\"%s\" ];\n",
+	    $net_obj->{ID},
+	    $net_obj->{LABEL},
+	    $net_obj->{FILLCOLOR},
+	    $net_obj->{COLOR};
+    }
+
+    print "  }\n";
+    
+}
+
+print "\n";
+
+foreach my $router_obj (@routers)
+{
+    printf "  %s [ label=\"%s\", shape=\"cylinder\", style=\"filled\", fillcolor=\"%s\", scolor=\"%s\" ];\n",
+	$router_obj->{ID},
+	$router_obj->{LABEL},
+	$router_obj->{FILLCOLOR},
+	$router_obj->{COLOR};
+
+    printf "  ME -> %s [ color=\"%s\" ];\n",
+	$router_obj->{ID},
+	$router_obj->{COLOR};
+
+    foreach my $net (sort keys %{$router_obj->{NETS}})
+    {
+	my $net_obj = $net{$net};
+	printf "  %s -> %s [ color=\"%s\" ];\n",
+	    $router_obj->{ID},
+	    $net_obj->{ID},
+	    $router_obj->{COLOR};
+    }
+    
+    print "\n";
+}
+
+print "}\n";
+
