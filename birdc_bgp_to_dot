@@ -93,7 +93,7 @@ my $my_as = $ARGV[0];
 
 ### read configuration
 
-my %config;
+my %config = ( SAME => [] );
 if (defined $configfile) {
     open my $config, '<', $configfile or die "can't open `$configfile': $!";
     while (my $line = <$config>)
@@ -120,7 +120,7 @@ if (defined $configfile) {
 	elsif ($command eq 'same') {
 	    die "object id 1 missing in config line $.: $line\n" unless $arg1;
 	    die "object id 2 missing in config line $.: $line\n" unless $arg2;
-	    push @{$config{$arg1}->{SAME}}, [$arg1, $arg2];
+	    push @{$config{SAME}}, [$arg1, $arg2];
 	}
 	else {
 	    die "unknown command in config line $.: $line\n";
@@ -241,6 +241,33 @@ if (defined $me_label) {
 }
 else {
     $me_label = 'ME';
+}
+
+
+### combine same
+
+
+foreach my $same (@{$config{SAME}}) {
+    my ($orig, $double) = @{$same};
+    if (exists $net{$double}) {
+	$net{$orig}->{LABEL} .= "\n".$net{$double}->{LABEL};
+	delete $net{$double};
+	@nets = grep !/^\Q$double\E$/, @nets;
+    }
+    if (exists $as{$double}) {
+	$as{$orig}->{LABEL} .= "\n".$as{$double}->{LABEL};
+	delete $as{$double};
+	@ass = grep !/^\Q$double\E$/, @ass;
+    }
+    if (exists $router{$double}) {
+	my $label = $router{$orig}->{LABEL} . "\n" . $router{$double}->{LABEL};
+	$router{$orig}->{LABEL} = $label;
+	$router{$orig}->{ID}    = $router{$double}->{ID};
+	$router{$orig}->{COLOR} = $router{$double}->{COLOR};
+	$router{$orig}->{FILLCOLOR} = $router{$double}->{FILLCOLOR};
+	$router{$double}->{LABEL} = $label;
+	@routers = grep { $_->{ID} ne $double } @routers;
+    }
 }
 
 
