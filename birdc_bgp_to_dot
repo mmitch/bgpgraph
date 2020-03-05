@@ -29,12 +29,12 @@ use constant DEFAULT_HIGHLIGHTCOLOR => 'lightblue';
 
 # color array to rotate
 my @colors = (
-    '#800000',
-    '#008000',
-    '#008080',
-    '#800080',
-    '#808000',
-    '#000080',
+    '#a00000',
+    '#600060',
+    '#00a000',
+    '#006060',
+    '#606000',
+    '#0000a0',
     );
 
 ### subroutines
@@ -308,7 +308,7 @@ print "\n";
 
 foreach my $router_obj (@routers)
 {
-    printf "  %s [ label=\"%s\", shape=\"cylinder\", style=\"filled\", fillcolor=\"%s\", scolor=\"%s\" ];\n",
+    printf "  %s [ label=\"%s\", shape=\"cylinder\", style=\"filled\", fillcolor=\"%s\", color=\"%s\" ];\n",
 	$router_obj->{ID},
 	$router_obj->{LABEL},
 	$router_obj->{FILLCOLOR},
