@@ -27,6 +27,9 @@ use constant DEFAULT_FILLCOLOR      => 'white';
 use constant DEFAULT_AS_FILLCOLOR   => 'lightgrey';
 use constant DEFAULT_HIGHLIGHTCOLOR => 'lightblue';
 
+use constant IMPORTANT   => 'weight=5, len=0.1';
+use constant UNIMPORTANT => 'weight=0.1, len=5, style="dashed", color="gray", arrowhead="none"';
+
 # color array to rotate
 my @colors = (
     '#a00000',
@@ -45,21 +48,19 @@ sub show_help() {
 usage:  birdc_bgp_to_dot [-c <conf>]
         birdc_bgp_to_dot [-h|--help]
 
-birdc_bgp_to_dot expects the output of `birdc`'s `show route` command on stdin.
+birdc_bgp_to_dot expects the output of `birdc`'s `show route all` command on stdin.
 birdc_bgp_to_dot writes a GraphViz graph file describing the graph to stdout.
 A config 
 
 examples:
   # basic usage
-  $ echo 'show route' | birdc | birdc_bgp_to_dot | fdp -Tpng > graph.png
+  $ birdc show route all | birdc_bgp_to_dot | fdp -Tpng > graph.png
 
   # IPv6 with configuration
-  $ echo 'show route' | birdc6 | birdc_bgp_to_dot -c my.conf \
-       | fdp -Tpng > graph.png
+  $ birdc6 show route all | birdc_bgp_to_dot -c my.conf | fdp -Tpng > graph.png
 
   # both IPv4 and IPv6
-  $ ( echo 'show route' | birdc; echo 'show route' | birdc6) \
-       | birdc_bgp_to_dot | fdp -Tpng > graph.png
+  $ ( birdc show route all; birdc6 show route all) | birdc_bgp_to_dot | fdp -Tpng > graph.png
 EOF
     ;
 }
@@ -135,6 +136,7 @@ if (defined $configfile) {
 my %net;
 my %router;
 my %as;
+my %path;
 
 my $net;
 while (my $line = <STDIN>)
@@ -169,6 +171,27 @@ while (my $line = <STDIN>)
     if ($active) {
 	$router_obj->{NETS}->{$net}++;
     }
+
+    # read next BGP path
+    while ($line = <STDIN>) {
+	last if $line =~ m#BGP\.as_path:((?:\s+[0-9]+)+)#;
+    }
+    my $path_type = $active ? 'ACTIVE_TO' : 'INACTIVE_TO';
+
+    my @path = grep { $_ =~ /\d+/ } split /\s+/, $line;
+    my $from = shift @path;
+    if ($active) {
+	$router_obj->{ASNS}->{$from}++;
+    }
+    while (@path) {
+	my $to = shift @path;
+	next if $from eq $to; # skip elongated paths / self-references
+	my $path_obj = $path{$from} // { FROM => $from };
+	$path_obj->{$path_type}->{$to}++;
+	$path{$from} = $path_obj;
+	$from = $to;
+    }
+
 }
 
 
@@ -177,6 +200,7 @@ while (my $line = <STDIN>)
 my @nets    = map { $net{$_}    } sort keys %net;
 my @ass     = map { $as{$_}     } sort keys %as;
 my @routers = map { $router{$_} } sort keys %router;
+my @paths   = map { $path{$_} }   sort keys %path;
 
 
 ### generate ids
@@ -195,6 +219,22 @@ my $router_id = 0;
 foreach my $router_obj (@routers) {
     $router_obj->{ID} = sprintf 'router%03d', $as_id++;
 }
+
+
+### clean up paths
+
+foreach my $path_obj (@paths) {
+    # remove active paths duplicated as inactive paths
+    foreach my $active_to (keys %{$path_obj->{ACTIVE_TO}}) {
+	delete $path_obj->{INACTIVE_TO}->{$active_to};
+    }
+
+    # remove bidirectional paths
+    foreach my $inactive_to (keys %{$path_obj->{INACTIVE_TO}}) {
+	delete $path{$inactive_to}->{INACTIVE_TO}->{$path_obj->{FROM}};
+    }
+}
+
 
 
 ### set labels
@@ -290,10 +330,20 @@ my $me_fillcolor = $config{ME}->{COLOR} // DEFAULT_FILLCOLOR;
 
 ### set route colors
 
+sub expand_active_path {
+    my ($asn) = @_;
+    my @path = ( $asn );
+    push @path, expand_active_path($_) foreach keys %{$path{$asn}->{ACTIVE_TO}};
+    return @path;
+}
+
 foreach my $router_obj (@routers) {
     my $color = $router_obj->{COLOR};
-    foreach my $net (sort keys %{$router_obj->{NETS}}) {
+    foreach my $net (keys %{$router_obj->{NETS}}) {
 	$net{$net}->{COLOR} = $color;
+    }
+    foreach my $asn (keys %{$router_obj->{ASNS}}) {
+	$path{$_}->{COLOR} = $color foreach expand_active_path($asn);
     }
 }
 
@@ -301,7 +351,7 @@ foreach my $router_obj (@routers) {
 ### print graph
 
 print "strict digraph {\n";
-print "  splines=\"compound\";\n";
+print "  splines=\"compound\"; sep=\"+10\";\n";
 
 printf "  ME [ label=\"%s\", penwidth=2, fillcolor=\"%s\" ];\n",
     $me_label,
@@ -320,7 +370,7 @@ foreach my $as_obj (@ass)
     foreach my $net (sort keys %{$as_obj->{NETS}})
     {
 	my $net_obj = $net{$net};
-	printf "    %s [ label=\"%s\", shape=folder, style=\"filled\", fillcolor=\"%s\", color=\"%s\" ];\n",
+	printf "    %s [ label=\"%s\", shape=\"folder\", style=\"filled\", fillcolor=\"%s\", color=\"%s\" ];\n",
 	    $net_obj->{ID},
 	    $net_obj->{LABEL},
 	    $net_obj->{FILLCOLOR},
@@ -329,6 +379,33 @@ foreach my $as_obj (@ass)
 
     print "  }\n";
     
+}
+
+print "\n";
+
+foreach my $path_obj (@paths)
+{
+    my $asn_from = $path_obj->{FROM};
+    my $as_obj_from = $as{$asn_from};
+
+    foreach my $asn_to (keys %{$path_obj->{INACTIVE_TO}}) {
+	my $as_obj_to = $as{$asn_to};
+	printf "cluster_%s -> cluster_%s [ %s ];\n",
+	    $as_obj_from->{ID},
+	    $as_obj_to->{ID},
+	    UNIMPORTANT;
+    }
+
+    foreach my $asn_to (keys %{$path_obj->{ACTIVE_TO}}) {
+	my $as_obj_to = $as{$asn_to};
+	printf "cluster_%s -> cluster_%s [ color=\"%s\", %s ];\n",
+	    $as_obj_from->{ID},
+	    $as_obj_to->{ID},
+	    $path_obj->{COLOR},
+	    IMPORTANT;
+    }
+
+    print "\n";
 }
 
 print "\n";
@@ -345,13 +422,22 @@ foreach my $router_obj (@routers)
 	$router_obj->{ID},
 	$router_obj->{COLOR};
 
-    foreach my $net (sort keys %{$router_obj->{NETS}})
-    {
-	my $net_obj = $net{$net};
-	printf "  %s -> %s [ color=\"%s\" ];\n",
+#    foreach my $net (sort keys %{$router_obj->{NETS}})
+#    {
+#	my $net_obj = $net{$net};
+#	printf "  %s -> %s [ color=\"%s\" ];\n",
+#	    $router_obj->{ID},
+#	    $net_obj->{ID},
+#	    $router_obj->{COLOR};
+#    }
+
+    foreach my $asn (sort keys %{$router_obj->{ASNS}}) {
+	my $as_obj = $as{$asn};
+	printf "  %s -> cluster_%s [ color=\"%s\", %s ];\n",
 	    $router_obj->{ID},
-	    $net_obj->{ID},
-	    $router_obj->{COLOR};
+	    $as_obj->{ID},
+	    $router_obj->{COLOR},
+	    IMPORTANT;
     }
     
     print "\n";
