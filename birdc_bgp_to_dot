@@ -60,7 +60,7 @@ examples:
   $ birdc6 show route all | birdc_bgp_to_dot -c my.conf | fdp -Tpng > graph.png
 
   # both IPv4 and IPv6
-  $ ( birdc show route all; birdc6 show route all) | birdc_bgp_to_dot | fdp -Tpng > graph.png
+  $ { birdc show route all; birdc6 show route all; } | birdc_bgp_to_dot | fdp -Tpng > graph.png
 EOF
     ;
 }
