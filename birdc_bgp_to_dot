@@ -353,7 +353,7 @@ foreach my $router_obj (@routers) {
 print "strict digraph {\n";
 print "  splines=\"compound\"; sep=\"+10\";\n";
 
-printf "  ME [ label=\"%s\", penwidth=2, fillcolor=\"%s\" ];\n",
+printf "  ME [ label=\"%s\", penwidth=2, style=\"filled\", fillcolor=\"%s\" ];\n",
     $me_label,
     $me_fillcolor;
 
