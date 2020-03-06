@@ -115,7 +115,7 @@ while (my $line = <STDIN>)
 }
 
 
-### prepend local AS is present
+### prepend local AS if present
 
 if (defined $my_as)
 {
