@@ -1,8 +1,8 @@
 #!/usr/bin/perl
 #
-# birdc_bgp_to_dot - print a network graph of routing information
+# birdc_bgp_to_dot - print a network graph of routing information from BIRD 1
 # 
-# Copyright (C) 2019 Christian Garbs <mitch@cgarbs.de>
+# Copyright (C) 2019-2026 Christian Garbs <mitch@cgarbs.de>
 # Licensed under GNU GPL 3 or later.
 #
 # This file is part of bgpgraph.
@@ -48,7 +48,7 @@ sub show_help() {
 usage:  birdc_bgp_to_dot [-c <conf>]
         birdc_bgp_to_dot [-h|--help]
 
-birdc_bgp_to_dot expects the output of `birdc`'s `show route all` command on stdin.
+birdc_bgp_to_dot expects the output of BIRD 1 `birdc`'s `show route all` command on stdin.
 birdc_bgp_to_dot writes a GraphViz graph file describing the graph to stdout.
 A config 
 

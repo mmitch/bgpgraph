@@ -8,7 +8,7 @@ bgpgraph - print a network graph of routing information
 license/copyright
 -----------------
 
-Copyright (C) 2011, 2014, 2015, 2018 Christian Garbs <mitch@cgarbs.de>  
+Copyright (C) 2011-2026 Christian Garbs <mitch@cgarbs.de>  
 Licensed under GNU GPL 3 or later.
 
 bgpgraph is free software: you can redistribute it and/or modify
@@ -34,8 +34,11 @@ project homepage
 dependencies
 ------------
 
-- ``vtysh`` from the [quagga](https://www.quagga.net/) package
 - ``dot`` from the [GraphViz](https://www.graphviz.org/) package
+- one of
+  - ``vtysh`` from the [quagga](https://www.quagga.net/) package
+  - ``birdc`` from the [BIRD 1](https://bird.network.cz/) package
+  - ``birdc`` from the [BIRD 2](https://bird.network.cz/) package
 
 
 usage
@@ -61,6 +64,10 @@ not be included in the generated graph:
 vtysh -c 'show ip bgp' | vtysh_bgp_to_dot | dot -Tpng > graph_without_local_node.png
 ```
 
+### using BIRD instead of quagga
+
+Use the scripts ``birdc_bgp_to_dot`` or ``bird2c_bgp_to_dot`` instead
+of ``vtysh_bgp_to_dot``.
 
 ### add information to the nodes in the graph
 
