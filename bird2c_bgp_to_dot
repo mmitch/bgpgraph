@@ -1,0 +1,450 @@
+#!/usr/bin/perl
+#
+# bird2c_bgp_to_dot - print a network graph of routing information from BIRD 2
+# 
+# Copyright (C) 2026 Christian Garbs <mitch@cgarbs.de>
+# Licensed under GNU GPL 3 or later.
+#
+# This file is part of bgpgraph.
+#
+# bgpgraph is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# bgpgraph is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with bgpgraph.  If not, see <http://www.gnu.org/licenses/>.
+#
+use strict;
+use warnings;
+
+use constant DEFAULT_FILLCOLOR      => 'white';
+use constant DEFAULT_AS_FILLCOLOR   => 'lightgrey';
+use constant DEFAULT_HIGHLIGHTCOLOR => 'lightblue';
+
+use constant IMPORTANT   => 'weight=5, len=0.1';
+use constant UNIMPORTANT => 'weight=0.1, len=5, style="dashed", color="gray", arrowhead="none"';
+
+# color array to rotate
+my @colors = (
+    '#a00000',
+    '#600060',
+    '#00a000',
+    '#006060',
+    '#606000',
+    '#0000a0',
+    );
+
+### subroutines
+
+# print help text
+sub show_help() {
+    print<<'EOF';
+usage:  bird2c_bgp_to_dot [-c <conf>]
+        bird2c_bgp_to_dot [-h|--help]
+
+bird2c_bgp_to_dot expects the output of BIRD 2 `birdc`'s `show route all` command on stdin.
+bird2c_bgp_to_dot writes a GraphViz graph file describing the graph to stdout.
+A config 
+
+examples:
+  # basic usage
+  $ birdc show route all | bird2c_bgp_to_dot | fdp -Tpng > graph.png
+EOF
+    ;
+}
+
+# get next color from color list
+sub get_next_color() {
+    my $color = shift @colors;
+    push @colors, $color;
+    return $color;
+}
+
+### parse commandline arguments
+
+my $configfile = undef;
+if (@ARGV == 1 and $ARGV[0] =~ /^(-h|--help)$/) {
+    # help requestet: exit with success
+    show_help;
+    exit 0;
+}
+elsif (@ARGV == 2 and $ARGV[0] =~ /^-c/) {
+    $configfile = $ARGV[1];
+}
+elsif (@ARGV > 0) {
+    # every other option given means unknown commandline arguments: exit with failure
+    show_help;
+    exit 1;
+}
+
+my $my_as = $ARGV[0];
+
+
+### read configuration
+
+my %config = ( SAME => [] );
+if (defined $configfile) {
+    open my $config, '<', $configfile or die "can't open `$configfile': $!";
+    while (my $line = <$config>)
+    {
+	$line =~ s/^\s+//;
+	$line =~ s/\s+$//;
+	next if $line eq '';
+	next if $line =~ /^#/;
+
+	my ($command, $arg1, $arg2) = split /\s+/, $line, 3;
+	$command = lc $command // '';
+	$arg1 = $arg1 // '';
+	$arg2 = $arg2 // '';
+	if ($command eq 'label') {
+	    die "object id missing in config line $.: $line\n" unless $arg1;
+	    die "label text missing in config line $.: $line\n" unless $arg2;
+	    $config{$arg1}->{LABEL} = $arg2;
+	}
+	elsif ($command eq 'color') {
+	    die "object id missing in config line $.: $line\n" unless $arg1;
+	    $arg2 = $arg2 || DEFAULT_HIGHLIGHTCOLOR;
+	    $config{$arg1}->{COLOR} = $arg2;
+	}
+	elsif ($command eq 'same') {
+	    die "object id 1 missing in config line $.: $line\n" unless $arg1;
+	    die "object id 2 missing in config line $.: $line\n" unless $arg2;
+	    push @{$config{SAME}}, [$arg1, $arg2];
+	}
+	else {
+	    die "unknown command in config line $.: $line\n";
+	}
+    }
+    close $config or die "can't close `$configfile': $!";
+}
+
+
+### parse birdc output
+
+my %net;
+my %router;
+my %as;
+my %path;
+
+my $net;
+while (my $line = <STDIN>)
+{
+    #                      $1                   $2       $3    $4        $5 opt.   $6             $7  $8
+    #                      IP/PREFIX            FOO     [NAME   TIME  ]  sel      (pref  )    [AS AS  type]
+    next unless $line =~ m#([0-9a-f:.]+/\d+)?\s+(\S+)\s\[(\S+)\s(\S+)\]\s(\*)?\s*\((\d+)\)\s+\[AS(\d+)(.)\]#;
+    # FOO = unicast / unreachable etc., currently unused
+    # NAME currently unused
+    # TIME currently unused (different formats; eg. YYYY-mm-hh for static routes or HH:MM:SS.sss for BGP)
+    $net = $1 if defined $1;
+    my ($pref, $asn, $type) = ($6, $7, $8);
+    my $active = defined $5;
+
+    $line = <STDIN>;
+    #                           $1                    $2
+    #                      via  ROUTER          on    DEVICE
+    next unless $line =~ m#via\s([0-9a-f:.]+)\s+on\s+(\S+)#;
+    # DEVICE currently unused
+    my ($router) = ($1);
+
+
+    # store net
+    my $net_obj = $net{$net} // { NET => $net };
+    $net{$net} = $net_obj;
+
+    # store as (part 2)
+    my $as_obj = $as{$asn} // { ASN => $asn};
+    $as{$asn} = $as_obj;
+    $as_obj->{NETS}->{$net}++;
+
+    # store router
+    my $router_obj = $router{$router};
+    if (! defined $router_obj ) {
+	$router_obj = {
+	    COLOR => get_next_color(),
+	    IP    => $router,
+	};
+	$router{$router} = $router_obj;
+    }
+    if ($active) {
+	$router_obj->{NETS}->{$net}++;
+    }
+
+    # read next BGP path
+    while ($line = <STDIN>) {
+	last if $line =~ m#BGP\.as_path:((?:\s+[0-9]+)+)#;
+    }
+    my $path_type = $active ? 'ACTIVE_TO' : 'INACTIVE_TO';
+
+    my @path = grep { $_ =~ /\d+/ } split /\s+/, $line;
+    my $from = shift @path;
+    if ($active) {
+	$router_obj->{ASNS}->{$from}++;
+    }
+    while (@path) {
+	my $to = shift @path;
+	next if $from eq $to; # skip elongated paths / self-references
+	my $path_obj = $path{$from} // { FROM => $from };
+	$path_obj->{$path_type}->{$to}++;
+	$path{$from} = $path_obj;
+	$from = $to;
+    }
+
+}
+
+
+### sort hashes
+
+my @nets    = map { $net{$_}    } sort keys %net;
+my @ass     = map { $as{$_}     } sort keys %as;
+my @routers = map { $router{$_} } sort keys %router;
+my @paths   = map { $path{$_} }   sort keys %path;
+
+
+### generate ids
+
+my $net_id = 0;
+foreach my $net_obj (@nets) {
+    $net_obj->{ID} = sprintf 'net%03d', $net_id++;
+}
+
+my $as_id = 0;
+foreach my $as_obj (@ass) {
+    $as_obj->{ID} = sprintf 'as%03d', $as_id++;
+}
+
+my $router_id = 0;
+foreach my $router_obj (@routers) {
+    $router_obj->{ID} = sprintf 'router%03d', $as_id++;
+}
+
+
+### clean up paths
+
+foreach my $path_obj (@paths) {
+    # remove active paths duplicated as inactive paths
+    foreach my $active_to (keys %{$path_obj->{ACTIVE_TO}}) {
+	delete $path_obj->{INACTIVE_TO}->{$active_to};
+    }
+
+    # remove bidirectional paths
+    foreach my $inactive_to (keys %{$path_obj->{INACTIVE_TO}}) {
+	delete $path{$inactive_to}->{INACTIVE_TO}->{$path_obj->{FROM}};
+    }
+}
+
+
+
+### set labels
+
+foreach my $net_obj (@nets) {
+    my $net = $net_obj->{NET};
+    my $label = $config{$net}->{LABEL};
+    if (defined $label) {
+	$label = "$net\n$label";
+    }
+    else {
+	$label = $net;
+    }
+    $net_obj->{LABEL} = $label;
+}
+
+foreach my $as_obj (@ass) {
+    my $asn = $as_obj->{ASN};
+    my $label = $config{$asn}->{LABEL};
+    if (defined $label) {
+	$label = "AS $asn\n$label";
+    }
+    else {
+	$label = "AS $asn";
+    }
+    $as_obj->{LABEL} = $label;
+}
+
+foreach my $router_obj (@routers) {
+    my $ip = $router_obj->{IP};
+    my $label = $config{$ip}->{LABEL};
+    if (defined $label) {
+	$label = "$label\n$ip";
+    }
+    else {
+	$label = $ip;
+    }
+    $router_obj->{LABEL} = $label;
+}
+
+my $me_label = $config{ME}->{LABEL};
+if (defined $me_label) {
+    $me_label = "ME\n$me_label";
+}
+else {
+    $me_label = 'ME';
+}
+
+
+### combine same
+
+
+foreach my $same (@{$config{SAME}}) {
+    my ($orig, $double) = @{$same};
+    if (exists $net{$double}) {
+	$net{$orig}->{LABEL} .= "\n".$net{$double}->{LABEL};
+	delete $net{$double};
+	@nets = grep !/^\Q$double\E$/, @nets;
+    }
+    if (exists $as{$double}) {
+	$as{$orig}->{LABEL} .= "\n".$as{$double}->{LABEL};
+	delete $as{$double};
+	@ass = grep !/^\Q$double\E$/, @ass;
+    }
+    if (exists $router{$double}) {
+	my $label = $router{$orig}->{LABEL} . "\n" . $router{$double}->{LABEL};
+	$router{$orig}->{LABEL} = $label;
+	$router{$orig}->{ID}    = $router{$double}->{ID};
+	$router{$orig}->{COLOR} = $router{$double}->{COLOR};
+	$router{$orig}->{FILLCOLOR} = $router{$double}->{FILLCOLOR};
+	$router{$double}->{LABEL} = $label;
+	@routers = grep { $_->{ID} ne $double } @routers;
+    }
+}
+
+
+### set fill colors
+
+foreach my $net_obj (@nets) {
+    $net_obj->{FILLCOLOR} = $config{$net_obj->{NET}}->{COLOR} // DEFAULT_FILLCOLOR;
+}
+
+foreach my $as_obj (@ass) {
+    $as_obj->{FILLCOLOR} = $config{$as_obj->{ASN}}->{COLOR} // DEFAULT_AS_FILLCOLOR;
+}
+
+foreach my $router_obj (@routers) {
+    $router_obj->{FILLCOLOR} = $config{$router_obj->{IP}}->{COLOR} // DEFAULT_FILLCOLOR;
+}
+
+my $me_fillcolor = $config{ME}->{COLOR} // DEFAULT_FILLCOLOR;
+
+
+### set route colors
+
+sub expand_active_path {
+    my ($asn) = @_;
+    my @path = ( $asn );
+    push @path, expand_active_path($_) foreach keys %{$path{$asn}->{ACTIVE_TO}};
+    return @path;
+}
+
+foreach my $router_obj (@routers) {
+    my $color = $router_obj->{COLOR};
+    foreach my $net (keys %{$router_obj->{NETS}}) {
+	$net{$net}->{COLOR} = $color;
+    }
+    foreach my $asn (keys %{$router_obj->{ASNS}}) {
+	$path{$_}->{COLOR} = $color foreach expand_active_path($asn);
+    }
+}
+
+
+### print graph
+
+print "strict digraph {\n";
+print "  splines=\"compound\"; sep=\"+10\";\n";
+
+printf "  ME [ label=\"%s\", penwidth=2, style=\"filled\", fillcolor=\"%s\" ];\n",
+    $me_label,
+    $me_fillcolor;
+
+print "\n";
+
+foreach my $as_obj (@ass)
+{
+    printf "  subgraph cluster_%s {\n", $as_obj->{ID};
+
+    printf "    label=\"%s\";\n", $as_obj->{LABEL};
+    printf "    fillcolor=\"%s\";\n", $as_obj->{FILLCOLOR};
+    printf "    style=\"filled\";\n";
+
+    foreach my $net (sort keys %{$as_obj->{NETS}})
+    {
+	my $net_obj = $net{$net};
+	printf "    %s [ label=\"%s\", shape=\"folder\", style=\"filled\", fillcolor=\"%s\", color=\"%s\" ];\n",
+	    $net_obj->{ID},
+	    $net_obj->{LABEL},
+	    $net_obj->{FILLCOLOR},
+	    $net_obj->{COLOR};
+    }
+
+    print "  }\n";
+    
+}
+
+print "\n";
+
+foreach my $path_obj (@paths)
+{
+    my $asn_from = $path_obj->{FROM};
+    my $as_obj_from = $as{$asn_from};
+
+    foreach my $asn_to (keys %{$path_obj->{INACTIVE_TO}}) {
+	my $as_obj_to = $as{$asn_to};
+	printf "cluster_%s -> cluster_%s [ %s ];\n",
+	    $as_obj_from->{ID},
+	    $as_obj_to->{ID},
+	    UNIMPORTANT;
+    }
+
+    foreach my $asn_to (keys %{$path_obj->{ACTIVE_TO}}) {
+	my $as_obj_to = $as{$asn_to};
+	printf "cluster_%s -> cluster_%s [ color=\"%s\", %s ];\n",
+	    $as_obj_from->{ID},
+	    $as_obj_to->{ID},
+	    $path_obj->{COLOR},
+	    IMPORTANT;
+    }
+
+    print "\n";
+}
+
+print "\n";
+
+foreach my $router_obj (@routers)
+{
+    printf "  %s [ label=\"%s\", shape=\"cylinder\", style=\"filled\", fillcolor=\"%s\", color=\"%s\" ];\n",
+	$router_obj->{ID},
+	$router_obj->{LABEL},
+	$router_obj->{FILLCOLOR},
+	$router_obj->{COLOR};
+
+    printf "  ME -> %s [ color=\"%s\" ];\n",
+	$router_obj->{ID},
+	$router_obj->{COLOR};
+
+#    foreach my $net (sort keys %{$router_obj->{NETS}})
+#    {
+#	my $net_obj = $net{$net};
+#	printf "  %s -> %s [ color=\"%s\" ];\n",
+#	    $router_obj->{ID},
+#	    $net_obj->{ID},
+#	    $router_obj->{COLOR};
+#    }
+
+    foreach my $asn (sort keys %{$router_obj->{ASNS}}) {
+	my $as_obj = $as{$asn};
+	printf "  %s -> cluster_%s [ color=\"%s\", %s ];\n",
+	    $router_obj->{ID},
+	    $as_obj->{ID},
+	    $router_obj->{COLOR},
+	    IMPORTANT;
+    }
+    
+    print "\n";
+}
+
+print "}\n";
+
