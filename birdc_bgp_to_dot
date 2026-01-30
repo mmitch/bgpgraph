@@ -390,7 +390,7 @@ foreach my $path_obj (@paths)
 
     foreach my $asn_to (keys %{$path_obj->{INACTIVE_TO}}) {
 	my $as_obj_to = $as{$asn_to};
-	printf "cluster_%s -> cluster_%s [ %s ];\n",
+	printf "  cluster_%s -> cluster_%s [ %s ];\n",
 	    $as_obj_from->{ID},
 	    $as_obj_to->{ID},
 	    UNIMPORTANT;
@@ -398,7 +398,7 @@ foreach my $path_obj (@paths)
 
     foreach my $asn_to (keys %{$path_obj->{ACTIVE_TO}}) {
 	my $as_obj_to = $as{$asn_to};
-	printf "cluster_%s -> cluster_%s [ color=\"%s\", %s ];\n",
+	printf "  cluster_%s -> cluster_%s [ color=\"%s\", %s ];\n",
 	    $as_obj_from->{ID},
 	    $as_obj_to->{ID},
 	    $path_obj->{COLOR},
